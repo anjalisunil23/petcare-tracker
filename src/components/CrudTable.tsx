@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
 
 interface Column<T> {
@@ -83,14 +84,14 @@ function CrudTable<T extends { id: string }>({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold font-[Nunito]">{title}</h2>
-        <Button onClick={openAdd} className="gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
+        <h2 className="text-xl sm:text-2xl font-bold font-[Nunito]">{title}</h2>
+        <Button onClick={openAdd} className="gap-2 w-full sm:w-auto">
           <Plus className="h-4 w-4" /> Add {title.replace(/s$/, "")}
         </Button>
       </div>
 
-      <div className="relative mb-4 max-w-sm">
+      <div className="relative mb-4">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           placeholder={`Search ${title.toLowerCase()}...`}
@@ -100,7 +101,8 @@ function CrudTable<T extends { id: string }>({
         />
       </div>
 
-      <div className="rounded-xl border bg-card">
+      {/* Desktop table */}
+      <div className="hidden md:block rounded-xl border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
@@ -140,9 +142,46 @@ function CrudTable<T extends { id: string }>({
         </Table>
       </div>
 
+      {/* Mobile card list */}
+      <div className="md:hidden space-y-3">
+        {filtered.length === 0 ? (
+          <p className="text-center py-8 text-muted-foreground">No {title.toLowerCase()} found</p>
+        ) : (
+          filtered.map((item) => (
+            <Card key={item.id}>
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="font-semibold text-base">
+                    {String(item[columns[0]?.key] ?? "")}
+                  </div>
+                  <div className="flex shrink-0">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(item)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDeleteId(item.id)}>
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                    </Button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                  {columns.slice(1).map((col) => (
+                    <div key={String(col.key)}>
+                      <span className="text-muted-foreground text-xs">{col.label}</span>
+                      <div className="mt-0.5">
+                        {col.render ? col.render(item[col.key], item) : String(item[col.key])}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
+
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingItem ? "Edit" : "Add"} {title.replace(/s$/, "")}</DialogTitle>
             <DialogDescription>
@@ -178,16 +217,16 @@ function CrudTable<T extends { id: string }>({
               </div>
             ))}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave}>{editingItem ? "Save Changes" : "Add"}</Button>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setDialogOpen(false)} className="w-full sm:w-auto">Cancel</Button>
+            <Button onClick={handleSave} className="w-full sm:w-auto">{editingItem ? "Save Changes" : "Add"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-[95vw] sm:max-w-lg">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this entry?</AlertDialogTitle>
             <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
