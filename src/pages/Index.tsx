@@ -1,12 +1,34 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Heart, Shield, Stethoscope, PawPrint, Calendar, FileText, Menu } from "lucide-react";
-import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
-import { useState } from "react";
+import { Heart, Shield, Stethoscope, PawPrint, Calendar, FileText } from "lucide-react";
+import { useEffect, useState } from "react";
+import { clearAuthSession, isAuthSessionActive } from "@/lib/auth";
+import { api } from "@/lib/api";
 
 const Index = () => {
-  const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    setIsLoggedIn(isAuthSessionActive());
+  }, []);
+
+  const handleAuthButtonClick = async () => {
+    if (!isLoggedIn) {
+      navigate("/login");
+      return;
+    }
+
+    try {
+      await api.logout();
+    } catch {
+      // Ignore remote logout errors and clear local auth state.
+    }
+    clearAuthSession();
+    setIsLoggedIn(false);
+    navigate("/");
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -18,27 +40,9 @@ const Index = () => {
             <span className="text-xl sm:text-2xl font-extrabold tracking-tight font-[Nunito]">PetCare</span>
           </div>
 
-          {/* Desktop nav */}
-          <div className="hidden sm:flex gap-3">
-            <Link to="/owner"><Button variant="outline" size="sm">Pet Owner</Button></Link>
-            <Link to="/vet"><Button variant="outline" size="sm">Veterinarian</Button></Link>
-            <Link to="/admin"><Button size="sm">Admin</Button></Link>
+          <div className="flex gap-3">
+            <Button size="sm" onClick={handleAuthButtonClick}>{isLoggedIn ? "Logout" : "Login"}</Button>
           </div>
-
-          {/* Mobile hamburger */}
-          <Sheet open={open} onOpenChange={setOpen}>
-            <SheetTrigger asChild className="sm:hidden">
-              <Button variant="ghost" size="icon"><Menu className="h-5 w-5" /></Button>
-            </SheetTrigger>
-            <SheetContent side="right" className="w-64 pt-10">
-              <SheetTitle className="sr-only">Navigation</SheetTitle>
-              <div className="flex flex-col gap-2">
-                <Link to="/owner" onClick={() => setOpen(false)}><Button variant="ghost" className="w-full justify-start">Pet Owner</Button></Link>
-                <Link to="/vet" onClick={() => setOpen(false)}><Button variant="ghost" className="w-full justify-start">Veterinarian</Button></Link>
-                <Link to="/admin" onClick={() => setOpen(false)}><Button className="w-full justify-start">Admin</Button></Link>
-              </div>
-            </SheetContent>
-          </Sheet>
         </div>
       </nav>
 
@@ -57,7 +61,6 @@ const Index = () => {
         </p>
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-4 sm:px-0">
           <Link to="/owner"><Button size="lg" className="text-base px-8 w-full sm:w-auto">Get Started</Button></Link>
-          <Link to="/admin"><Button size="lg" variant="outline" className="text-base px-8 w-full sm:w-auto">Admin Portal</Button></Link>
         </div>
       </section>
 

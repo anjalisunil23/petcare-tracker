@@ -1,35 +1,180 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import CrudTable from "@/components/CrudTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { sampleAppointments, sampleMedicalRecords } from "@/data/sampleData";
-import { Appointment, MedicalRecord } from "@/types/petcare";
+import { Appointment, MedicalRecord, Pet } from "@/types/petcare";
 import { Stethoscope, Calendar, FileText } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { api } from "@/lib/api";
+import { getAuthUser } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
 
 const VetDashboard = () => {
-  const [appointments, setAppointments] = useState<Appointment[]>(sampleAppointments);
-  const [records, setRecords] = useState<MedicalRecord[]>(sampleMedicalRecords);
+  const { toast } = useToast();
+  const user = getAuthUser();
+  const vetName = user?.name || "";
+  const [pets, setPets] = useState<Pet[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [records, setRecords] = useState<MedicalRecord[]>([]);
 
-  const addAppointment = (appt: Omit<Appointment, "id">) => {
-    setAppointments([...appointments, { ...appt, id: `a${Date.now()}` }]);
-  };
-  const editAppointment = (appt: Appointment) => {
-    setAppointments(appointments.map((a) => (a.id === appt.id ? appt : a)));
-  };
-  const deleteAppointment = (id: string) => {
-    setAppointments(appointments.filter((a) => a.id !== id));
+  const petIdByName = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const pet of pets) {
+      map.set(pet.name.toLowerCase(), pet.id);
+    }
+    return map;
+  }, [pets]);
+
+  const loadData = async () => {
+    const [petsResult, appointmentsResult, recordsResult] = await Promise.allSettled([
+      api.listPets(),
+      // Show all data to vets so they can manage clinic workload.
+      api.listAppointments(),
+      api.listMedicalRecords(),
+    ]);
+
+    if (petsResult.status === "fulfilled") {
+      setPets(petsResult.value);
+    } else {
+      toast({
+        title: "Could not load pets",
+        description: petsResult.reason instanceof Error ? petsResult.reason.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+
+    if (appointmentsResult.status === "fulfilled") {
+      setAppointments(appointmentsResult.value);
+    } else {
+      toast({
+        title: "Could not load appointments",
+        description: appointmentsResult.reason instanceof Error ? appointmentsResult.reason.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+
+    if (recordsResult.status === "fulfilled") {
+      setRecords(recordsResult.value);
+    } else {
+      toast({
+        title: "Could not load medical records",
+        description: recordsResult.reason instanceof Error ? recordsResult.reason.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
   };
 
-  const addRecord = (rec: Omit<MedicalRecord, "id">) => {
-    setRecords([...records, { ...rec, id: `m${Date.now()}` }]);
+  useEffect(() => {
+    void loadData();
+  }, [vetName]);
+
+  const resolvePetId = (petName: string, petId: string): string => {
+    return petId || petIdByName.get(petName.toLowerCase()) || "";
   };
-  const editRecord = (rec: MedicalRecord) => {
-    setRecords(records.map((r) => (r.id === rec.id ? rec : r)));
+
+  const addAppointment = async (appt: Omit<Appointment, "id">) => {
+    try {
+      const petId = resolvePetId(appt.petName, appt.petId);
+      if (!petId) {
+        throw new Error("Please select an existing pet.");
+      }
+
+      const created = await api.createAppointment({ ...appt, petId, vetName });
+      setAppointments((prev) => [created, ...prev]);
+      toast({ title: "Appointment added" });
+    } catch (error) {
+      toast({
+        title: "Failed to add appointment",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
   };
-  const deleteRecord = (id: string) => {
-    setRecords(records.filter((r) => r.id !== id));
+
+  const editAppointment = async (appt: Appointment) => {
+    try {
+      const petId = resolvePetId(appt.petName, appt.petId);
+      if (!petId) {
+        throw new Error("Please select an existing pet.");
+      }
+
+      const updated = await api.updateAppointment({ ...appt, petId, vetName });
+      setAppointments((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+      toast({ title: "Appointment updated" });
+    } catch (error) {
+      toast({
+        title: "Failed to update appointment",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const deleteAppointment = async (id: string) => {
+    try {
+      await api.deleteAppointment(id);
+      setAppointments((prev) => prev.filter((a) => a.id !== id));
+      toast({ title: "Appointment deleted" });
+    } catch (error) {
+      toast({
+        title: "Failed to delete appointment",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const addRecord = async (rec: Omit<MedicalRecord, "id">) => {
+    try {
+      const petId = resolvePetId(rec.petName, rec.petId);
+      if (!petId) {
+        throw new Error("Please select an existing pet.");
+      }
+
+      const created = await api.createMedicalRecord({ ...rec, petId, vetName });
+      setRecords((prev) => [created, ...prev]);
+      toast({ title: "Medical record added" });
+    } catch (error) {
+      toast({
+        title: "Failed to add medical record",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const editRecord = async (rec: MedicalRecord) => {
+    try {
+      const petId = resolvePetId(rec.petName, rec.petId);
+      if (!petId) {
+        throw new Error("Please select an existing pet.");
+      }
+
+      const updated = await api.updateMedicalRecord({ ...rec, petId, vetName });
+      setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      toast({ title: "Medical record updated" });
+    } catch (error) {
+      toast({
+        title: "Failed to update medical record",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const deleteRecord = async (id: string) => {
+    try {
+      await api.deleteMedicalRecord(id);
+      setRecords((prev) => prev.filter((r) => r.id !== id));
+      toast({ title: "Medical record deleted" });
+    } catch (error) {
+      toast({
+        title: "Failed to delete medical record",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
   };
 
   const navItems = [{ label: "Dashboard", href: "/vet" }];
@@ -85,7 +230,11 @@ const VetDashboard = () => {
               { key: "status", label: "Status", render: (val) => <Badge variant={val === "completed" ? "default" : val === "cancelled" ? "destructive" : "secondary"}>{String(val)}</Badge> },
             ]}
             fields={[
-              { key: "petName", label: "Pet Name" },
+              {
+                key: "petId",
+                label: "Pet",
+                options: pets.map((pet) => ({ value: pet.id, label: `${pet.name} (${pet.ownerName})` })),
+              },
               { key: "ownerName", label: "Owner Name" },
               { key: "vetName", label: "Veterinarian" },
               { key: "date", label: "Date", type: "date" },
@@ -96,7 +245,7 @@ const VetDashboard = () => {
             onAdd={addAppointment}
             onEdit={editAppointment}
             onDelete={deleteAppointment}
-            defaultValues={{ petName: "", petId: "", ownerName: "", vetName: "Dr. Sarah Wilson", date: "", time: "", reason: "", status: "scheduled" }}
+            defaultValues={{ petName: "", petId: pets[0]?.id || "", ownerName: "", vetName, date: "", time: "", reason: "", status: "scheduled" }}
           />
         </TabsContent>
 
@@ -112,7 +261,11 @@ const VetDashboard = () => {
               { key: "vetName", label: "Vet" },
             ]}
             fields={[
-              { key: "petName", label: "Pet Name" },
+              {
+                key: "petId",
+                label: "Pet",
+                options: pets.map((pet) => ({ value: pet.id, label: `${pet.name} (${pet.ownerName})` })),
+              },
               { key: "date", label: "Date", type: "date" },
               { key: "diagnosis", label: "Diagnosis" },
               { key: "treatment", label: "Treatment" },
@@ -122,7 +275,7 @@ const VetDashboard = () => {
             onAdd={addRecord}
             onEdit={editRecord}
             onDelete={deleteRecord}
-            defaultValues={{ petName: "", petId: "", date: "", diagnosis: "", treatment: "", vetName: "Dr. Sarah Wilson", notes: "" }}
+            defaultValues={{ petName: "", petId: pets[0]?.id || "", date: "", diagnosis: "", treatment: "", vetName, notes: "" }}
           />
         </TabsContent>
       </Tabs>

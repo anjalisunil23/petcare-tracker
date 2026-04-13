@@ -1,41 +1,206 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import CrudTable from "@/components/CrudTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { samplePets, sampleAppointments } from "@/data/sampleData";
-import { Pet, Appointment } from "@/types/petcare";
+import { Pet, Appointment, VeterinarianProfile } from "@/types/petcare";
 import { PawPrint, Calendar, Heart } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { api } from "@/lib/api";
+import { getAuthUser } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const OwnerDashboard = () => {
-  const [pets, setPets] = useState<Pet[]>(samplePets.filter((p) => p.ownerId === "u1"));
-  const [appointments, setAppointments] = useState<Appointment[]>(
-    sampleAppointments.filter((a) => a.ownerName === "John Smith")
-  );
+  const { toast } = useToast();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const user = getAuthUser();
+  const ownerName = user?.name || "";
+  const [pets, setPets] = useState<Pet[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [veterinarians, setVeterinarians] = useState<VeterinarianProfile[]>([]);
+  const [activeTab, setActiveTab] = useState("pets");
+  const [openCreateKey, setOpenCreateKey] = useState<number | undefined>(undefined);
 
-  const addPet = (pet: Omit<Pet, "id">) => {
-    setPets([...pets, { ...pet, id: `p${Date.now()}`, ownerName: "John Smith", ownerId: "u1" }]);
+  const bookingParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const preselectedVetName = bookingParams.get("vetName")?.trim() || "";
+  const shouldStartBooking = bookingParams.get("book") === "1";
+
+  const petIdByName = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const pet of pets) {
+      map.set(pet.name.toLowerCase(), pet.id);
+    }
+    return map;
+  }, [pets]);
+
+  const loadData = async () => {
+    const [petsResult, appointmentsResult, veterinariansResult] = await Promise.allSettled([
+      api.listPets(ownerName),
+      api.listAppointments({ ownerName }),
+      api.listVeterinarians(),
+    ]);
+
+    if (petsResult.status === "fulfilled") {
+      setPets(petsResult.value);
+    } else {
+      toast({
+        title: "Could not load pets",
+        description: petsResult.reason instanceof Error ? petsResult.reason.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+
+    if (appointmentsResult.status === "fulfilled") {
+      setAppointments(appointmentsResult.value);
+    } else {
+      toast({
+        title: "Could not load appointments",
+        description: appointmentsResult.reason instanceof Error ? appointmentsResult.reason.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+
+    if (veterinariansResult.status === "fulfilled") {
+      setVeterinarians(veterinariansResult.value);
+    } else {
+      toast({
+        title: "Could not load veterinarians",
+        description: veterinariansResult.reason instanceof Error ? veterinariansResult.reason.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
   };
 
-  const editPet = (pet: Pet) => {
-    setPets(pets.map((p) => (p.id === pet.id ? pet : p)));
+  useEffect(() => {
+    void loadData();
+  }, [ownerName]);
+
+  useEffect(() => {
+    if (!shouldStartBooking) {
+      return;
+    }
+
+    setActiveTab("appointments");
+
+    if (!pets.length) {
+      toast({
+        title: "Add a pet first",
+        description: "Create a pet profile before booking an appointment.",
+      });
+      return;
+    }
+
+    setOpenCreateKey((prev) => (prev ?? 0) + 1);
+
+    const nextParams = new URLSearchParams(location.search);
+    nextParams.delete("book");
+    navigate(
+      {
+        pathname: location.pathname,
+        search: nextParams.toString() ? `?${nextParams.toString()}` : "",
+      },
+      { replace: true }
+    );
+  }, [shouldStartBooking, pets.length, location.pathname, location.search, navigate, toast]);
+
+  const addPet = async (pet: Omit<Pet, "id">) => {
+    try {
+      const created = await api.createPet({ ...pet, ownerName, ownerId: "" });
+      setPets((prev) => [created, ...prev]);
+      toast({ title: "Pet added" });
+    } catch (error) {
+      toast({
+        title: "Failed to add pet",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
   };
 
-  const deletePet = (id: string) => {
-    setPets(pets.filter((p) => p.id !== id));
+  const editPet = async (pet: Pet) => {
+    try {
+      const updated = await api.updatePet({ ...pet, ownerName, ownerId: "" });
+      setPets((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      toast({ title: "Pet updated" });
+    } catch (error) {
+      toast({
+        title: "Failed to update pet",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
   };
 
-  const addAppointment = (appt: Omit<Appointment, "id">) => {
-    setAppointments([...appointments, { ...appt, id: `a${Date.now()}`, ownerName: "John Smith" }]);
+  const deletePet = async (id: string) => {
+    try {
+      await api.deletePet(id);
+      setPets((prev) => prev.filter((p) => p.id !== id));
+      toast({ title: "Pet deleted" });
+    } catch (error) {
+      toast({
+        title: "Failed to delete pet",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
   };
 
-  const editAppointment = (appt: Appointment) => {
-    setAppointments(appointments.map((a) => (a.id === appt.id ? appt : a)));
+  const resolvePetId = (appointment: Omit<Appointment, "id"> | Appointment): string => {
+    return appointment.petId || petIdByName.get(appointment.petName.toLowerCase()) || "";
   };
 
-  const deleteAppointment = (id: string) => {
-    setAppointments(appointments.filter((a) => a.id !== id));
+  const addAppointment = async (appt: Omit<Appointment, "id">) => {
+    try {
+      const petId = resolvePetId(appt);
+      if (!petId) {
+        throw new Error("Please select an existing pet.");
+      }
+
+      const created = await api.createAppointment({ ...appt, petId, ownerName });
+      setAppointments((prev) => [created, ...prev]);
+      toast({ title: "Appointment added" });
+    } catch (error) {
+      toast({
+        title: "Failed to add appointment",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const editAppointment = async (appt: Appointment) => {
+    try {
+      const petId = resolvePetId(appt);
+      if (!petId) {
+        throw new Error("Please select an existing pet.");
+      }
+
+      const updated = await api.updateAppointment({ ...appt, petId, ownerName });
+      setAppointments((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+      toast({ title: "Appointment updated" });
+    } catch (error) {
+      toast({
+        title: "Failed to update appointment",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const deleteAppointment = async (id: string) => {
+    try {
+      await api.deleteAppointment(id);
+      setAppointments((prev) => prev.filter((a) => a.id !== id));
+      toast({ title: "Appointment deleted" });
+    } catch (error) {
+      toast({
+        title: "Failed to delete appointment",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
   };
 
   const navItems = [
@@ -75,7 +240,7 @@ const OwnerDashboard = () => {
         </Card>
       </div>
 
-      <Tabs defaultValue="pets">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="pets">My Pets</TabsTrigger>
           <TabsTrigger value="appointments">Appointments</TabsTrigger>
@@ -94,7 +259,7 @@ const OwnerDashboard = () => {
             ]}
             fields={[
               { key: "name", label: "Name" },
-              { key: "species", label: "Species", options: [{ value: "Dog", label: "Dog" }, { value: "Cat", label: "Cat" }, { value: "Bird", label: "Bird" }, { value: "Other", label: "Other" }] },
+              { key: "species", label: "Species", options: [{ value: "dog", label: "Dog" }, { value: "cat", label: "Cat" }, { value: "bird", label: "Bird" }, { value: "other", label: "Other" }] },
               { key: "breed", label: "Breed" },
               { key: "age", label: "Age", type: "number" },
               { key: "weight", label: "Weight (kg)", type: "number" },
@@ -103,7 +268,7 @@ const OwnerDashboard = () => {
             onAdd={addPet}
             onEdit={editPet}
             onDelete={deletePet}
-            defaultValues={{ name: "", species: "Dog", breed: "", age: 0, ownerName: "John Smith", ownerId: "u1", weight: 0, notes: "" }}
+            defaultValues={{ name: "", species: "dog", breed: "", age: 0, ownerName, ownerId: "", weight: 0, notes: "" }}
           />
         </TabsContent>
 
@@ -128,8 +293,16 @@ const OwnerDashboard = () => {
               },
             ]}
             fields={[
-              { key: "petName", label: "Pet Name" },
-              { key: "vetName", label: "Veterinarian" },
+              {
+                key: "petId",
+                label: "Pet",
+                options: pets.map((pet) => ({ value: pet.id, label: pet.name })),
+              },
+              {
+                key: "vetName",
+                label: "Veterinarian",
+                options: veterinarians.map((vet) => ({ value: vet.name, label: vet.name })),
+              },
               { key: "date", label: "Date", type: "date" },
               { key: "time", label: "Time", type: "time" },
               { key: "reason", label: "Reason" },
@@ -138,7 +311,9 @@ const OwnerDashboard = () => {
             onAdd={addAppointment}
             onEdit={editAppointment}
             onDelete={deleteAppointment}
-            defaultValues={{ petName: "", petId: "", ownerName: "John Smith", vetName: "", date: "", time: "", reason: "", status: "scheduled" }}
+            defaultValues={{ petName: "", petId: pets[0]?.id || "", ownerName, vetName: preselectedVetName || "", date: "", time: "", reason: "", status: "scheduled" }}
+            createDraft={{ vetName: preselectedVetName || "" }}
+            openCreateKey={openCreateKey}
           />
         </TabsContent>
       </Tabs>

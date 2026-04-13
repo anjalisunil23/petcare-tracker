@@ -42,4 +42,12 @@ export interface User {
   joinDate: string;
 }
 
+export interface VeterinarianProfile {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  joinDate: string;
+}
+
 export type Role = "owner" | "admin" | "vet";

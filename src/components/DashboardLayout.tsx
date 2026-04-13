@@ -1,9 +1,11 @@
-import { Link, useLocation } from "react-router-dom";
-import { PawPrint, Menu, X } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { PawPrint, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
+import { clearAuthSession } from "@/lib/auth";
+import { api } from "@/lib/api";
 
 interface NavItem {
   label: string;
@@ -19,9 +21,19 @@ interface DashboardLayoutProps {
 
 const DashboardLayout = ({ title, navItems, roleColor, children }: DashboardLayoutProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
-  const allLinks = [...navItems, { label: "Home", href: "/" }];
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+    } catch {
+      // Session might already be invalid; clear local auth regardless.
+    }
+    clearAuthSession();
+    setOpen(false);
+    navigate("/");
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -46,9 +58,7 @@ const DashboardLayout = ({ title, navItems, roleColor, children }: DashboardLayo
                 </Button>
               </Link>
             ))}
-            <Link to="/">
-              <Button variant="outline" size="sm">Home</Button>
-            </Link>
+            <Button variant="outline" size="sm" onClick={handleLogout}>Logout</Button>
           </div>
 
           {/* Mobile hamburger */}
@@ -61,7 +71,7 @@ const DashboardLayout = ({ title, navItems, roleColor, children }: DashboardLayo
             <SheetContent side="right" className="w-64 pt-10">
               <SheetTitle className="sr-only">Navigation</SheetTitle>
               <div className="flex flex-col gap-2">
-                {allLinks.map((item) => (
+                {navItems.map((item) => (
                   <Link key={item.href} to={item.href} onClick={() => setOpen(false)}>
                     <Button
                       variant={location.pathname === item.href ? "default" : "ghost"}
@@ -71,6 +81,7 @@ const DashboardLayout = ({ title, navItems, roleColor, children }: DashboardLayo
                     </Button>
                   </Link>
                 ))}
+                <Button variant="outline" className="w-full justify-start" onClick={handleLogout}>Logout</Button>
               </div>
             </SheetContent>
           </Sheet>

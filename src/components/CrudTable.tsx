@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -30,6 +30,8 @@ interface CrudTableProps<T extends { id: string }> {
   onEdit: (item: T) => void;
   onDelete: (id: string) => void;
   defaultValues: Omit<T, "id">;
+  createDraft?: Partial<Omit<T, "id">>;
+  openCreateKey?: number;
 }
 
 function CrudTable<T extends { id: string }>({
@@ -41,6 +43,8 @@ function CrudTable<T extends { id: string }>({
   onEdit,
   onDelete,
   defaultValues,
+  createDraft,
+  openCreateKey,
 }: CrudTableProps<T>) {
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -56,9 +60,16 @@ function CrudTable<T extends { id: string }>({
 
   const openAdd = () => {
     setEditingItem(null);
-    setFormData({ ...defaultValues } as any);
+    setFormData({ ...defaultValues, ...(createDraft || {}) } as any);
     setDialogOpen(true);
   };
+
+  useEffect(() => {
+    if (openCreateKey === undefined) {
+      return;
+    }
+    openAdd();
+  }, [openCreateKey]);
 
   const openEdit = (item: T) => {
     setEditingItem(item);

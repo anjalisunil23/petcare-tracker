@@ -1,32 +1,206 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import CrudTable from "@/components/CrudTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { samplePets, sampleAppointments, sampleUsers } from "@/data/sampleData";
 import { Pet, Appointment, User } from "@/types/petcare";
 import { Users, PawPrint, Calendar, Shield } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { api } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 const AdminDashboard = () => {
-  const [users, setUsers] = useState<User[]>(sampleUsers);
-  const [pets, setPets] = useState<Pet[]>(samplePets);
-  const [appointments, setAppointments] = useState<Appointment[]>(sampleAppointments);
+  const { toast } = useToast();
+  const [users, setUsers] = useState<User[]>([]);
+  const [pets, setPets] = useState<Pet[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+
+  const petIdByName = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const pet of pets) {
+      map.set(pet.name.toLowerCase(), pet.id);
+    }
+    return map;
+  }, [pets]);
+
+  useEffect(() => {
+    const loadData = async () => {
+      const [usersResult, petsResult, appointmentsResult] = await Promise.allSettled([
+        api.listUsers(),
+        api.listPets(),
+        api.listAppointments(),
+      ]);
+
+      if (usersResult.status === "fulfilled") {
+        setUsers(usersResult.value);
+      } else {
+        toast({
+          title: "Could not load users",
+          description: usersResult.reason instanceof Error ? usersResult.reason.message : "Unknown error",
+          variant: "destructive",
+        });
+      }
+
+      if (petsResult.status === "fulfilled") {
+        setPets(petsResult.value);
+      } else {
+        toast({
+          title: "Could not load pets",
+          description: petsResult.reason instanceof Error ? petsResult.reason.message : "Unknown error",
+          variant: "destructive",
+        });
+      }
+
+      if (appointmentsResult.status === "fulfilled") {
+        setAppointments(appointmentsResult.value);
+      } else {
+        toast({
+          title: "Could not load appointments",
+          description: appointmentsResult.reason instanceof Error ? appointmentsResult.reason.message : "Unknown error",
+          variant: "destructive",
+        });
+      }
+    };
+
+    void loadData();
+  }, []);
 
   // Users CRUD
-  const addUser = (u: Omit<User, "id">) => setUsers([...users, { ...u, id: `u${Date.now()}` }]);
-  const editUser = (u: User) => setUsers(users.map((x) => (x.id === u.id ? u : x)));
-  const deleteUser = (id: string) => setUsers(users.filter((x) => x.id !== id));
+  const addUser = async (u: Omit<User, "id">) => {
+    try {
+      const created = await api.createUser({ ...u, password: "ChangeMe123!" });
+      setUsers((prev) => [created, ...prev]);
+      toast({ title: "User added" });
+    } catch (error) {
+      toast({
+        title: "Failed to add user",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+  const editUser = async (u: User) => {
+    try {
+      const updated = await api.updateUser(u);
+      setUsers((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+      toast({ title: "User updated" });
+    } catch (error) {
+      toast({
+        title: "Failed to update user",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+  const deleteUser = async (id: string) => {
+    try {
+      await api.deleteUser(id);
+      setUsers((prev) => prev.filter((x) => x.id !== id));
+      toast({ title: "User deleted" });
+    } catch (error) {
+      toast({
+        title: "Failed to delete user",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Pets CRUD
-  const addPet = (p: Omit<Pet, "id">) => setPets([...pets, { ...p, id: `p${Date.now()}` }]);
-  const editPet = (p: Pet) => setPets(pets.map((x) => (x.id === p.id ? p : x)));
-  const deletePet = (id: string) => setPets(pets.filter((x) => x.id !== id));
+  const addPet = async (p: Omit<Pet, "id">) => {
+    try {
+      const created = await api.createPet(p);
+      setPets((prev) => [created, ...prev]);
+      toast({ title: "Pet added" });
+    } catch (error) {
+      toast({
+        title: "Failed to add pet",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+  const editPet = async (p: Pet) => {
+    try {
+      const updated = await api.updatePet(p);
+      setPets((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+      toast({ title: "Pet updated" });
+    } catch (error) {
+      toast({
+        title: "Failed to update pet",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+  const deletePet = async (id: string) => {
+    try {
+      await api.deletePet(id);
+      setPets((prev) => prev.filter((x) => x.id !== id));
+      toast({ title: "Pet deleted" });
+    } catch (error) {
+      toast({
+        title: "Failed to delete pet",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
 
   // Appointments CRUD
-  const addAppt = (a: Omit<Appointment, "id">) => setAppointments([...appointments, { ...a, id: `a${Date.now()}` }]);
-  const editAppt = (a: Appointment) => setAppointments(appointments.map((x) => (x.id === a.id ? a : x)));
-  const deleteAppt = (id: string) => setAppointments(appointments.filter((x) => x.id !== id));
+  const resolvePetId = (appointment: Omit<Appointment, "id"> | Appointment): string => {
+    return appointment.petId || petIdByName.get(appointment.petName.toLowerCase()) || "";
+  };
+
+  const addAppt = async (a: Omit<Appointment, "id">) => {
+    try {
+      const petId = resolvePetId(a);
+      if (!petId) {
+        throw new Error("Please select an existing pet.");
+      }
+
+      const created = await api.createAppointment({ ...a, petId });
+      setAppointments((prev) => [created, ...prev]);
+      toast({ title: "Appointment added" });
+    } catch (error) {
+      toast({
+        title: "Failed to add appointment",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+  const editAppt = async (a: Appointment) => {
+    try {
+      const petId = resolvePetId(a);
+      if (!petId) {
+        throw new Error("Please select an existing pet.");
+      }
+
+      const updated = await api.updateAppointment({ ...a, petId });
+      setAppointments((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+      toast({ title: "Appointment updated" });
+    } catch (error) {
+      toast({
+        title: "Failed to update appointment",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+  const deleteAppt = async (id: string) => {
+    try {
+      await api.deleteAppointment(id);
+      setAppointments((prev) => prev.filter((x) => x.id !== id));
+      toast({ title: "Appointment deleted" });
+    } catch (error) {
+      toast({
+        title: "Failed to delete appointment",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
 
   const navItems = [{ label: "Dashboard", href: "/admin" }];
 
@@ -108,7 +282,7 @@ const AdminDashboard = () => {
             ]}
             fields={[
               { key: "name", label: "Name" },
-              { key: "species", label: "Species", options: [{ value: "Dog", label: "Dog" }, { value: "Cat", label: "Cat" }, { value: "Bird", label: "Bird" }, { value: "Other", label: "Other" }] },
+              { key: "species", label: "Species", options: [{ value: "dog", label: "Dog" }, { value: "cat", label: "Cat" }, { value: "bird", label: "Bird" }, { value: "other", label: "Other" }] },
               { key: "breed", label: "Breed" },
               { key: "ownerName", label: "Owner Name" },
               { key: "age", label: "Age", type: "number" },
@@ -118,7 +292,7 @@ const AdminDashboard = () => {
             onAdd={addPet}
             onEdit={editPet}
             onDelete={deletePet}
-            defaultValues={{ name: "", species: "Dog", breed: "", age: 0, ownerName: "", ownerId: "", weight: 0, notes: "" }}
+            defaultValues={{ name: "", species: "dog", breed: "", age: 0, ownerName: "", ownerId: "", weight: 0, notes: "" }}
           />
         </TabsContent>
 
@@ -134,7 +308,11 @@ const AdminDashboard = () => {
               { key: "status", label: "Status", render: (val) => <Badge variant={val === "completed" ? "default" : val === "cancelled" ? "destructive" : "secondary"}>{String(val)}</Badge> },
             ]}
             fields={[
-              { key: "petName", label: "Pet Name" },
+              {
+                key: "petId",
+                label: "Pet",
+                options: pets.map((pet) => ({ value: pet.id, label: `${pet.name} (${pet.ownerName})` })),
+              },
               { key: "ownerName", label: "Owner Name" },
               { key: "vetName", label: "Veterinarian" },
               { key: "date", label: "Date", type: "date" },
@@ -145,7 +323,7 @@ const AdminDashboard = () => {
             onAdd={addAppt}
             onEdit={editAppt}
             onDelete={deleteAppt}
-            defaultValues={{ petName: "", petId: "", ownerName: "", vetName: "", date: "", time: "", reason: "", status: "scheduled" }}
+            defaultValues={{ petName: "", petId: pets[0]?.id || "", ownerName: "", vetName: "", date: "", time: "", reason: "", status: "scheduled" }}
           />
         </TabsContent>
       </Tabs>
