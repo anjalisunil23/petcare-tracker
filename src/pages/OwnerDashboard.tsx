@@ -3,7 +3,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import CrudTable from "@/components/CrudTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Pet, Appointment, VeterinarianProfile } from "@/types/petcare";
+import { Pet, Appointment, VeterinarianProfile, Vaccination, VaccinationReminder } from "@/types/petcare";
 import { PawPrint, Calendar, Heart } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
@@ -20,6 +20,8 @@ const OwnerDashboard = () => {
   const [pets, setPets] = useState<Pet[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [veterinarians, setVeterinarians] = useState<VeterinarianProfile[]>([]);
+  const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
+  const [reminders, setReminders] = useState<VaccinationReminder[]>([]);
   const [activeTab, setActiveTab] = useState("pets");
   const [openCreateKey, setOpenCreateKey] = useState<number | undefined>(undefined);
 
@@ -36,10 +38,12 @@ const OwnerDashboard = () => {
   }, [pets]);
 
   const loadData = async () => {
-    const [petsResult, appointmentsResult, veterinariansResult] = await Promise.allSettled([
+    const [petsResult, appointmentsResult, veterinariansResult, vaccinationsResult, remindersResult] = await Promise.allSettled([
       api.listPets(ownerName),
       api.listAppointments({ ownerName }),
       api.listVeterinarians(),
+      api.listVaccinations({ ownerName }),
+      api.listVaccinationReminders({ ownerName }),
     ]);
 
     if (petsResult.status === "fulfilled") {
@@ -68,6 +72,26 @@ const OwnerDashboard = () => {
       toast({
         title: "Could not load veterinarians",
         description: veterinariansResult.reason instanceof Error ? veterinariansResult.reason.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+
+    if (vaccinationsResult.status === "fulfilled") {
+      setVaccinations(vaccinationsResult.value);
+    } else {
+      toast({
+        title: "Could not load vaccinations",
+        description: vaccinationsResult.reason instanceof Error ? vaccinationsResult.reason.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+
+    if (remindersResult.status === "fulfilled") {
+      setReminders(remindersResult.value);
+    } else {
+      toast({
+        title: "Could not load reminders",
+        description: remindersResult.reason instanceof Error ? remindersResult.reason.message : "Unknown error",
         variant: "destructive",
       });
     }
@@ -210,7 +234,7 @@ const OwnerDashboard = () => {
   return (
     <DashboardLayout title="Pet Owner" navItems={navItems} roleColor="bg-primary/10 text-primary">
       {/* Stats */}
-      <div className="grid sm:grid-cols-3 gap-4 mb-8">
+      <div className="grid sm:grid-cols-4 gap-4 mb-8">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">My Pets</CardTitle>
@@ -238,12 +262,23 @@ const OwnerDashboard = () => {
             <p className="text-3xl font-bold">{appointments.filter((a) => a.status === "scheduled").length}</p>
           </CardContent>
         </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Reminders</CardTitle>
+            <Badge variant="secondary">{reminders.length}</Badge>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold">{reminders.filter((reminder) => reminder.status === "pending").length}</p>
+          </CardContent>
+        </Card>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="pets">My Pets</TabsTrigger>
           <TabsTrigger value="appointments">Appointments</TabsTrigger>
+          <TabsTrigger value="vaccinations">Vaccinations</TabsTrigger>
+          <TabsTrigger value="reminders">Reminders</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pets" className="mt-6">
@@ -314,6 +349,63 @@ const OwnerDashboard = () => {
             defaultValues={{ petName: "", petId: pets[0]?.id || "", ownerName, vetName: preselectedVetName || "", date: "", time: "", reason: "", status: "scheduled" }}
             createDraft={{ vetName: preselectedVetName || "" }}
             openCreateKey={openCreateKey}
+          />
+        </TabsContent>
+
+        <TabsContent value="vaccinations" className="mt-6">
+          <CrudTable<Vaccination>
+            title="Vaccinations"
+            data={vaccinations}
+            columns={[
+              { key: "petName", label: "Pet" },
+              { key: "vaccineName", label: "Vaccine" },
+              { key: "administeredDate", label: "Administered" },
+              { key: "nextDueDate", label: "Next Due" },
+              { key: "vetName", label: "Vet" },
+              {
+                key: "reminderStatus",
+                label: "Reminder",
+                render: (val, item) => (
+                  <Badge variant={val === "sent" ? "default" : val === "acknowledged" ? "secondary" : "outline"}>
+                    {String(val || "pending")} {item.reminderDate ? `• ${item.reminderDate}` : ""}
+                  </Badge>
+                ),
+              },
+            ]}
+            fields={[] as never[]}
+            onAdd={() => undefined}
+            onEdit={() => undefined}
+            onDelete={() => undefined}
+            defaultValues={{ petName: "", petId: "", vaccineName: "", administeredDate: "", nextDueDate: "", vetName: "", reminderDaysBefore: 7, notes: "" }}
+            readOnly
+          />
+        </TabsContent>
+
+        <TabsContent value="reminders" className="mt-6">
+          <CrudTable<VaccinationReminder>
+            title="Reminders"
+            data={reminders}
+            columns={[
+              { key: "petName", label: "Pet" },
+              { key: "vaccineName", label: "Vaccine" },
+              { key: "reminderDate", label: "Reminder Date" },
+              { key: "message", label: "Message" },
+              {
+                key: "status",
+                label: "Status",
+                render: (val) => (
+                  <Badge variant={val === "sent" ? "default" : val === "acknowledged" ? "secondary" : "outline"}>
+                    {String(val)}
+                  </Badge>
+                ),
+              },
+            ]}
+            fields={[] as never[]}
+            onAdd={() => undefined}
+            onEdit={() => undefined}
+            onDelete={() => undefined}
+            defaultValues={{ vaccinationId: "", petName: "", vaccineName: "", vetName: "", reminderDate: "", message: "", status: "pending", lastSentAt: "" }}
+            readOnly
           />
         </TabsContent>
       </Tabs>

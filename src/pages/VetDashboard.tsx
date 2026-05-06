@@ -3,7 +3,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import CrudTable from "@/components/CrudTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Appointment, MedicalRecord, Pet } from "@/types/petcare";
+import { Appointment, MedicalRecord, Pet, Vaccination, VaccinationReminder } from "@/types/petcare";
 import { Stethoscope, Calendar, FileText } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
@@ -17,6 +17,8 @@ const VetDashboard = () => {
   const [pets, setPets] = useState<Pet[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [records, setRecords] = useState<MedicalRecord[]>([]);
+  const [vaccinations, setVaccinations] = useState<Vaccination[]>([]);
+  const [reminders, setReminders] = useState<VaccinationReminder[]>([]);
 
   const petIdByName = useMemo(() => {
     const map = new Map<string, string>();
@@ -27,11 +29,13 @@ const VetDashboard = () => {
   }, [pets]);
 
   const loadData = async () => {
-    const [petsResult, appointmentsResult, recordsResult] = await Promise.allSettled([
+    const [petsResult, appointmentsResult, recordsResult, vaccinationsResult, remindersResult] = await Promise.allSettled([
       api.listPets(),
       // Show all data to vets so they can manage clinic workload.
       api.listAppointments(),
       api.listMedicalRecords(),
+      api.listVaccinations(),
+      api.listVaccinationReminders(),
     ]);
 
     if (petsResult.status === "fulfilled") {
@@ -60,6 +64,26 @@ const VetDashboard = () => {
       toast({
         title: "Could not load medical records",
         description: recordsResult.reason instanceof Error ? recordsResult.reason.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+
+    if (vaccinationsResult.status === "fulfilled") {
+      setVaccinations(vaccinationsResult.value);
+    } else {
+      toast({
+        title: "Could not load vaccinations",
+        description: vaccinationsResult.reason instanceof Error ? vaccinationsResult.reason.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+
+    if (remindersResult.status === "fulfilled") {
+      setReminders(remindersResult.value);
+    } else {
+      toast({
+        title: "Could not load reminders",
+        description: remindersResult.reason instanceof Error ? remindersResult.reason.message : "Unknown error",
         variant: "destructive",
       });
     }
@@ -144,6 +168,83 @@ const VetDashboard = () => {
     }
   };
 
+  const addVaccination = async (vaccination: Omit<Vaccination, "id">) => {
+    try {
+      const petId = resolvePetId(vaccination.petName, vaccination.petId);
+      if (!petId) {
+        throw new Error("Please select an existing pet.");
+      }
+
+      const created = await api.createVaccination({ ...vaccination, petId, vetName });
+      setVaccinations((prev) => [created, ...prev]);
+      setReminders((prev) => [{
+        id: `tmp-${Date.now()}`,
+        vaccinationId: created.id,
+        petName: created.petName,
+        vaccineName: created.vaccineName,
+        vetName: created.vetName,
+        reminderDate: created.reminderDate || created.nextDueDate,
+        message: created.reminderMessage || `${created.petName} is due for ${created.vaccineName}`,
+        status: created.reminderStatus || "pending",
+        lastSentAt: "",
+      }, ...prev]);
+      toast({ title: "Vaccination added" });
+    } catch (error) {
+      toast({
+        title: "Failed to add vaccination",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const editVaccination = async (vaccination: Vaccination) => {
+    try {
+      const petId = resolvePetId(vaccination.petName, vaccination.petId);
+      if (!petId) {
+        throw new Error("Please select an existing pet.");
+      }
+
+      const updated = await api.updateVaccination({ ...vaccination, petId, vetName });
+      setVaccinations((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setReminders((prev) => prev.map((item) => (
+        item.vaccinationId === updated.id
+          ? {
+              ...item,
+              petName: updated.petName,
+              vaccineName: updated.vaccineName,
+              vetName: updated.vetName,
+              reminderDate: updated.reminderDate || updated.nextDueDate,
+              message: updated.reminderMessage || item.message,
+              status: updated.reminderStatus || item.status,
+            }
+          : item
+      )));
+      toast({ title: "Vaccination updated" });
+    } catch (error) {
+      toast({
+        title: "Failed to update vaccination",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const deleteVaccination = async (id: string) => {
+    try {
+      await api.deleteVaccination(id);
+      setVaccinations((prev) => prev.filter((item) => item.id !== id));
+      setReminders((prev) => prev.filter((item) => item.vaccinationId !== id));
+      toast({ title: "Vaccination deleted" });
+    } catch (error) {
+      toast({
+        title: "Failed to delete vaccination",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
   const editRecord = async (rec: MedicalRecord) => {
     try {
       const petId = resolvePetId(rec.petName, rec.petId);
@@ -181,7 +282,7 @@ const VetDashboard = () => {
 
   return (
     <DashboardLayout title="Veterinarian" navItems={navItems} roleColor="bg-accent/10 text-accent-foreground">
-      <div className="grid sm:grid-cols-3 gap-4 mb-8">
+      <div className="grid sm:grid-cols-4 gap-4 mb-8">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Today's Appointments</CardTitle>
@@ -209,12 +310,23 @@ const VetDashboard = () => {
             <p className="text-3xl font-bold">{appointments.filter((a) => a.status === "completed").length}</p>
           </CardContent>
         </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Vaccinations</CardTitle>
+            <FileText className="h-4 w-4 text-accent" />
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold">{vaccinations.length}</p>
+          </CardContent>
+        </Card>
       </div>
 
       <Tabs defaultValue="appointments">
         <TabsList>
           <TabsTrigger value="appointments">Appointments</TabsTrigger>
           <TabsTrigger value="records">Medical Records</TabsTrigger>
+          <TabsTrigger value="vaccinations">Vaccinations</TabsTrigger>
+          <TabsTrigger value="reminders">Reminders</TabsTrigger>
         </TabsList>
 
         <TabsContent value="appointments" className="mt-6">
@@ -276,6 +388,70 @@ const VetDashboard = () => {
             onEdit={editRecord}
             onDelete={deleteRecord}
             defaultValues={{ petName: "", petId: pets[0]?.id || "", date: "", diagnosis: "", treatment: "", vetName, notes: "" }}
+          />
+        </TabsContent>
+
+        <TabsContent value="vaccinations" className="mt-6">
+          <CrudTable<Vaccination>
+            title="Vaccinations"
+            data={vaccinations}
+            columns={[
+              { key: "petName", label: "Pet" },
+              { key: "vaccineName", label: "Vaccine" },
+              { key: "administeredDate", label: "Administered" },
+              { key: "nextDueDate", label: "Next Due" },
+              { key: "vetName", label: "Vet" },
+              {
+                key: "reminderStatus",
+                label: "Reminder",
+                render: (val, item) => (
+                  <Badge variant={val === "sent" ? "default" : val === "acknowledged" ? "secondary" : "outline"}>
+                    {String(val || "pending")} {item.reminderDate ? `• ${item.reminderDate}` : ""}
+                  </Badge>
+                ),
+              },
+            ]}
+            fields={[
+              { key: "petId", label: "Pet", options: pets.map((pet) => ({ value: pet.id, label: `${pet.name} (${pet.ownerName})` })) },
+              { key: "vaccineName", label: "Vaccine Name" },
+              { key: "administeredDate", label: "Administered Date", type: "date" },
+              { key: "nextDueDate", label: "Next Due Date", type: "date" },
+              { key: "vetName", label: "Veterinarian" },
+              { key: "reminderDaysBefore", label: "Reminder Days Before", type: "number" },
+              { key: "notes", label: "Notes" },
+            ]}
+            onAdd={addVaccination}
+            onEdit={editVaccination}
+            onDelete={deleteVaccination}
+            defaultValues={{ petName: "", petId: pets[0]?.id || "", vaccineName: "", administeredDate: "", nextDueDate: "", vetName, reminderDaysBefore: 7, notes: "" }}
+          />
+        </TabsContent>
+
+        <TabsContent value="reminders" className="mt-6">
+          <CrudTable<VaccinationReminder>
+            title="Reminders"
+            data={reminders}
+            columns={[
+              { key: "petName", label: "Pet" },
+              { key: "vaccineName", label: "Vaccine" },
+              { key: "reminderDate", label: "Reminder Date" },
+              { key: "message", label: "Message" },
+              {
+                key: "status",
+                label: "Status",
+                render: (val) => (
+                  <Badge variant={val === "sent" ? "default" : val === "acknowledged" ? "secondary" : "outline"}>
+                    {String(val)}
+                  </Badge>
+                ),
+              },
+            ]}
+            fields={[{ key: "status", label: "Status", options: [{ value: "pending", label: "Pending" }, { value: "sent", label: "Sent" }, { value: "acknowledged", label: "Acknowledged" }] }]}
+            onAdd={() => undefined}
+            onEdit={() => undefined}
+            onDelete={() => undefined}
+            defaultValues={{ vaccinationId: "", petName: "", vaccineName: "", vetName, reminderDate: "", message: "", status: "pending", lastSentAt: "" }}
+            readOnly
           />
         </TabsContent>
       </Tabs>

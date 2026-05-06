@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import CrudTable from "@/components/CrudTable";
+import VeterinarianAdd from "@/components/VeterinarianAdd";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Pet, Appointment, User } from "@/types/petcare";
@@ -237,12 +238,22 @@ const AdminDashboard = () => {
         </Card>
       </div>
 
-      <Tabs defaultValue="users">
+      <Tabs defaultValue="veterinarians">
         <TabsList>
+          <TabsTrigger value="veterinarians">Veterinarians</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>
           <TabsTrigger value="pets">Pets</TabsTrigger>
           <TabsTrigger value="appointments">Appointments</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="veterinarians" className="mt-6">
+          <VeterinarianAdd
+            veterinarians={users.filter((u) => u.role === "vet")}
+            onVeterinarianAdded={(vet) => setUsers((prev) => [vet, ...prev])}
+            onVeterinarianUpdated={(vet) => setUsers((prev) => prev.map((u) => (u.id === vet.id ? vet : u)))}
+            onVeterinarianDeleted={(id) => setUsers((prev) => prev.filter((u) => u.id !== id))}
+          />
+        </TabsContent>
 
         <TabsContent value="users" className="mt-6">
           <CrudTable<User>

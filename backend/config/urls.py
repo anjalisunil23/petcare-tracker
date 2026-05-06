@@ -14,12 +14,16 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from django.conf import settings
 from django.contrib import admin
-from django.urls import include, path
-from django.views.generic import RedirectView
+from django.urls import include, path, re_path
+from django.views.generic import RedirectView, TemplateView
+from django.views.static import serve
 
 urlpatterns = [
-    path('', RedirectView.as_view(url='/api/health/', permanent=False)),
     path('admin/', admin.site.urls),
     path('api/', include('api.urls')),
+    path('static/<path:path>', serve, {'document_root': settings.STATIC_ROOT}),
+    path('', TemplateView.as_view(template_name='index.html')),
+    re_path(r'^(?!api/|admin/|static/).*$' , TemplateView.as_view(template_name='index.html')),
 ]

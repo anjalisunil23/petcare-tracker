@@ -32,6 +32,7 @@ interface CrudTableProps<T extends { id: string }> {
   defaultValues: Omit<T, "id">;
   createDraft?: Partial<Omit<T, "id">>;
   openCreateKey?: number;
+  readOnly?: boolean;
 }
 
 function CrudTable<T extends { id: string }>({
@@ -45,6 +46,7 @@ function CrudTable<T extends { id: string }>({
   defaultValues,
   createDraft,
   openCreateKey,
+  readOnly = false,
 }: CrudTableProps<T>) {
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -97,9 +99,11 @@ function CrudTable<T extends { id: string }>({
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
         <h2 className="text-xl sm:text-2xl font-bold font-[Nunito]">{title}</h2>
-        <Button onClick={openAdd} className="gap-2 w-full sm:w-auto">
-          <Plus className="h-4 w-4" /> Add {title.replace(/s$/, "")}
-        </Button>
+        {!readOnly && (
+          <Button onClick={openAdd} className="gap-2 w-full sm:w-auto">
+            <Plus className="h-4 w-4" /> Add {title.replace(/s$/, "")}
+          </Button>
+        )}
       </div>
 
       <div className="relative mb-4">
@@ -120,13 +124,13 @@ function CrudTable<T extends { id: string }>({
               {columns.map((col) => (
                 <TableHead key={String(col.key)}>{col.label}</TableHead>
               ))}
-              <TableHead className="text-right">Actions</TableHead>
+              {!readOnly && <TableHead className="text-right">Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={columns.length + 1} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={columns.length + (readOnly ? 0 : 1)} className="text-center py-8 text-muted-foreground">
                   No {title.toLowerCase()} found
                 </TableCell>
               </TableRow>
@@ -138,14 +142,16 @@ function CrudTable<T extends { id: string }>({
                       {col.render ? col.render(item[col.key], item) : String(item[col.key])}
                     </TableCell>
                   ))}
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(item)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => setDeleteId(item.id)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </TableCell>
+                  {!readOnly && (
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="icon" onClick={() => openEdit(item)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => setDeleteId(item.id)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))
             )}
@@ -165,14 +171,16 @@ function CrudTable<T extends { id: string }>({
                   <div className="font-semibold text-base">
                     {String(item[columns[0]?.key] ?? "")}
                   </div>
-                  <div className="flex shrink-0">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(item)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDeleteId(item.id)}>
-                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                    </Button>
-                  </div>
+                  {!readOnly && (
+                    <div className="flex shrink-0">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(item)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDeleteId(item.id)}>
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                   {columns.slice(1).map((col) => (

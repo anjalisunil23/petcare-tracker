@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 
-from .models import Appointment, MedicalRecord, Pet, UserProfile
+from .models import Appointment, MedicalRecord, Pet, UserProfile, Vaccination, VaccinationReminder
 
 
 class PetSerializer(serializers.ModelSerializer):
@@ -45,6 +45,65 @@ class MedicalRecordSerializer(serializers.ModelSerializer):
             "vet_name",
             "notes",
             "created_at",
+        ]
+
+
+class VaccinationSerializer(serializers.ModelSerializer):
+    pet_name = serializers.CharField(source="pet.name", read_only=True)
+    reminder_date = serializers.SerializerMethodField()
+    reminder_status = serializers.SerializerMethodField()
+    reminder_message = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Vaccination
+        fields = [
+            "id",
+            "pet",
+            "pet_name",
+            "vaccine_name",
+            "administered_date",
+            "next_due_date",
+            "vet_name",
+            "reminder_days_before",
+            "reminder_date",
+            "reminder_status",
+            "reminder_message",
+            "notes",
+            "created_at",
+        ]
+
+    def get_reminder_date(self, obj):
+        reminder = getattr(obj, "reminder", None)
+        return reminder.reminder_date.isoformat() if reminder else None
+
+    def get_reminder_status(self, obj):
+        reminder = getattr(obj, "reminder", None)
+        return reminder.status if reminder else "pending"
+
+    def get_reminder_message(self, obj):
+        reminder = getattr(obj, "reminder", None)
+        return reminder.message if reminder else ""
+
+
+class VaccinationReminderSerializer(serializers.ModelSerializer):
+    pet_name = serializers.CharField(source="vaccination.pet.name", read_only=True)
+    vaccine_name = serializers.CharField(source="vaccination.vaccine_name", read_only=True)
+    vet_name = serializers.CharField(source="vaccination.vet_name", read_only=True)
+
+    class Meta:
+        model = VaccinationReminder
+        fields = [
+            "id",
+            "vaccination",
+            "pet_name",
+            "vaccine_name",
+            "vet_name",
+            "reminder_date",
+            "message",
+            "status",
+            "last_sent_at",
+            "created_at",
+            "updated_at",
         ]
 
 
@@ -128,3 +187,22 @@ class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
     role = serializers.ChoiceField(choices=UserProfile.ROLE_CHOICES, required=False)
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        email = value.lower().strip()
+        if not User.objects.filter(username=email).exists():
+            raise serializers.ValidationError("No account found with this email address.")
+        return email
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    new_password = serializers.CharField(write_only=True, min_length=6)
+
+    def validate_new_password(self, value):
+        validate_password(value)
+        return value

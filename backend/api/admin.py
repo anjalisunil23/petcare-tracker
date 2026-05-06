@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Appointment, MedicalRecord, Pet, UserProfile
+from .models import Appointment, MedicalRecord, Pet, UserProfile, Vaccination, VaccinationReminder
 
 @admin.register(Pet)
 class PetAdmin(admin.ModelAdmin):
@@ -19,6 +19,20 @@ class MedicalRecordAdmin(admin.ModelAdmin):
 	list_display = ("id", "pet", "date", "diagnosis", "vet_name")
 	list_filter = ("date",)
 	search_fields = ("pet__name", "diagnosis", "treatment", "vet_name")
+
+
+@admin.register(Vaccination)
+class VaccinationAdmin(admin.ModelAdmin):
+	list_display = ("id", "pet", "vaccine_name", "administered_date", "next_due_date", "vet_name")
+	list_filter = ("next_due_date", "vet_name")
+	search_fields = ("pet__name", "vaccine_name", "vet_name")
+
+
+@admin.register(VaccinationReminder)
+class VaccinationReminderAdmin(admin.ModelAdmin):
+	list_display = ("id", "vaccination", "reminder_date", "status", "last_sent_at")
+	list_filter = ("status", "reminder_date")
+	search_fields = ("vaccination__pet__name", "vaccination__vaccine_name", "message")
 
 
 @admin.register(UserProfile)

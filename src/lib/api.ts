@@ -1,7 +1,7 @@
-import { Appointment, MedicalRecord, Pet, Role, User, VeterinarianProfile } from "@/types/petcare";
+import { Appointment, MedicalRecord, Pet, Role, User, VeterinarianProfile, Vaccination, VaccinationReminder } from "@/types/petcare";
 import { AuthUser, getAuthToken } from "@/lib/auth";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 
 interface RequestOptions extends RequestInit {
   auth?: boolean;
@@ -77,6 +77,36 @@ type BackendMedicalRecord = {
   notes: string;
 };
 
+type BackendVaccination = {
+  id: number;
+  pet: number;
+  pet_name: string;
+  vaccine_name: string;
+  administered_date: string | null;
+  next_due_date: string;
+  vet_name: string;
+  reminder_days_before: number;
+  reminder_date: string | null;
+  reminder_status: "pending" | "sent" | "acknowledged";
+  reminder_message: string;
+  notes: string;
+  created_at: string;
+};
+
+type BackendVaccinationReminder = {
+  id: number;
+  vaccination: number;
+  pet_name: string;
+  vaccine_name: string;
+  vet_name: string;
+  reminder_date: string;
+  message: string;
+  status: "pending" | "sent" | "acknowledged";
+  last_sent_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type BackendUser = {
   id: number;
   name: string;
@@ -119,6 +149,33 @@ const mapMedicalRecord = (record: BackendMedicalRecord): MedicalRecord => ({
   treatment: record.treatment,
   vetName: record.vet_name,
   notes: record.notes,
+});
+
+const mapVaccination = (vaccination: BackendVaccination): Vaccination => ({
+  id: String(vaccination.id),
+  petName: vaccination.pet_name,
+  petId: String(vaccination.pet),
+  vaccineName: vaccination.vaccine_name,
+  administeredDate: vaccination.administered_date || "",
+  nextDueDate: vaccination.next_due_date,
+  vetName: vaccination.vet_name,
+  reminderDaysBefore: vaccination.reminder_days_before,
+  reminderDate: vaccination.reminder_date || undefined,
+  reminderStatus: vaccination.reminder_status,
+  reminderMessage: vaccination.reminder_message,
+  notes: vaccination.notes,
+});
+
+const mapVaccinationReminder = (reminder: BackendVaccinationReminder): VaccinationReminder => ({
+  id: String(reminder.id),
+  vaccinationId: String(reminder.vaccination),
+  petName: reminder.pet_name,
+  vaccineName: reminder.vaccine_name,
+  vetName: reminder.vet_name,
+  reminderDate: reminder.reminder_date,
+  message: reminder.message,
+  status: reminder.status,
+  lastSentAt: reminder.last_sent_at || "",
 });
 
 const mapUser = (user: BackendUser): User => ({
@@ -256,6 +313,74 @@ export const api = {
     return records.map(mapMedicalRecord);
   },
 
+  async listVaccinations(filters?: { ownerName?: string; vetName?: string }): Promise<Vaccination[]> {
+    const params = new URLSearchParams();
+    if (filters?.ownerName) params.set("owner_name", filters.ownerName);
+    if (filters?.vetName) params.set("vet_name", filters.vetName);
+    const query = params.toString() ? `?${params.toString()}` : "";
+    const vaccinations = await apiRequest<BackendVaccination[]>(`/vaccinations/${query}`);
+    return vaccinations.map(mapVaccination);
+  },
+
+  async createVaccination(payload: Omit<Vaccination, "id" | "reminderDate" | "reminderStatus" | "reminderMessage">): Promise<Vaccination> {
+    const vaccination = await apiRequest<BackendVaccination>("/vaccinations/", {
+      method: "POST",
+      body: JSON.stringify({
+        pet: Number(payload.petId),
+        vaccine_name: payload.vaccineName,
+        administered_date: payload.administeredDate || null,
+        next_due_date: payload.nextDueDate,
+        vet_name: payload.vetName,
+        reminder_days_before: payload.reminderDaysBefore,
+        notes: payload.notes,
+      }),
+    });
+    return mapVaccination(vaccination);
+  },
+
+  async updateVaccination(payload: Vaccination): Promise<Vaccination> {
+    const vaccination = await apiRequest<BackendVaccination>(`/vaccinations/${payload.id}/`, {
+      method: "PUT",
+      body: JSON.stringify({
+        pet: Number(payload.petId),
+        vaccine_name: payload.vaccineName,
+        administered_date: payload.administeredDate || null,
+        next_due_date: payload.nextDueDate,
+        vet_name: payload.vetName,
+        reminder_days_before: payload.reminderDaysBefore,
+        notes: payload.notes,
+      }),
+    });
+    return mapVaccination(vaccination);
+  },
+
+  async deleteVaccination(id: string): Promise<void> {
+    return apiRequest<void>(`/vaccinations/${id}/`, { method: "DELETE" });
+  },
+
+  async listVaccinationReminders(filters?: { ownerName?: string; vetName?: string; status?: string }): Promise<VaccinationReminder[]> {
+    const params = new URLSearchParams();
+    if (filters?.ownerName) params.set("owner_name", filters.ownerName);
+    if (filters?.vetName) params.set("vet_name", filters.vetName);
+    if (filters?.status) params.set("status", filters.status);
+    const query = params.toString() ? `?${params.toString()}` : "";
+    const reminders = await apiRequest<BackendVaccinationReminder[]>(`/vaccination-reminders/${query}`);
+    return reminders.map(mapVaccinationReminder);
+  },
+
+  async updateVaccinationReminder(payload: VaccinationReminder): Promise<VaccinationReminder> {
+    const reminder = await apiRequest<BackendVaccinationReminder>(`/vaccination-reminders/${payload.id}/`, {
+      method: "PUT",
+      body: JSON.stringify({
+        status: payload.status,
+        reminder_date: payload.reminderDate,
+        message: payload.message,
+        vaccination: Number(payload.vaccinationId),
+      }),
+    });
+    return mapVaccinationReminder(reminder);
+  },
+
   async createMedicalRecord(payload: Omit<MedicalRecord, "id">): Promise<MedicalRecord> {
     const record = await apiRequest<BackendMedicalRecord>("/medical-records/", {
       method: "POST",
@@ -329,5 +454,21 @@ export const api = {
 
   async deleteUser(id: string): Promise<void> {
     return apiRequest<void>(`/users/${id}/`, { method: "DELETE" });
+  },
+
+  async requestPasswordReset(email: string): Promise<{ message: string; token: string; email: string }> {
+    return apiRequest<{ message: string; token: string; email: string }>("/auth/password-reset/", {
+      method: "POST",
+      auth: false,
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  async confirmPasswordReset(token: string, newPassword: string): Promise<{ message: string }> {
+    return apiRequest<{ message: string }>("/auth/password-reset-confirm/", {
+      method: "POST",
+      auth: false,
+      body: JSON.stringify({ token, new_password: newPassword }),
+    });
   },
 };

@@ -169,6 +169,18 @@ const LoginPage = () => {
                   </Link>
                 </p>
               </div>
+
+              <div className="flex items-center gap-2 text-sm">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-muted-foreground">or</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+
+              <Link to="/forgot-password">
+                <Button type="button" variant="outline" className="w-full">
+                  Forgot Password?
+                </Button>
+              </Link>
             </form>
           </CardContent>
         </Card>

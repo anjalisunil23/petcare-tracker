@@ -33,6 +33,33 @@ export interface MedicalRecord {
   notes: string;
 }
 
+export interface Vaccination {
+  id: string;
+  petName: string;
+  petId: string;
+  vaccineName: string;
+  administeredDate: string;
+  nextDueDate: string;
+  vetName: string;
+  reminderDaysBefore: number;
+  reminderDate?: string;
+  reminderStatus?: "pending" | "sent" | "acknowledged";
+  reminderMessage?: string;
+  notes: string;
+}
+
+export interface VaccinationReminder {
+  id: string;
+  vaccinationId: string;
+  petName: string;
+  vaccineName: string;
+  vetName: string;
+  reminderDate: string;
+  message: string;
+  status: "pending" | "sent" | "acknowledged";
+  lastSentAt: string;
+}
+
 export interface User {
   id: string;
   name: string;

@@ -131,4 +131,3 @@ python manage.py runserver
 - The backend uses SQLite for local development so the app works without extra database setup.
 - If you switch to MySQL, run `backend/mysql_workbench_setup.sql` first.
 - The app is designed to support owner, vet, and admin workflows from a single codebase.
-
