@@ -36,7 +36,7 @@ def _split_csv_env(*names: str, default: str) -> list[str]:
     return [item for item in default.split(",") if item]
 
 
-ALLOWED_HOSTS = _split_csv_env("DJANGO_ALLOWED_HOSTS", "ALLOWED_HOSTS", default="127.0.0.1,localhost")
+ALLOWED_HOSTS = _split_csv_env("DJANGO_ALLOWED_HOSTS", "ALLOWED_HOSTS", default="127.0.0.1,localhost,petcare-tracker-1.onrender.com")
 
 
 # Application definition
@@ -161,7 +161,7 @@ CORS_ALLOWED_ORIGINS = [
 CSRF_TRUSTED_ORIGINS = [
     origin for origin in os.getenv(
         "CSRF_TRUSTED_ORIGINS",
-        "https://petcaretracker.app,https://www.petcaretracker.app,http://localhost:8080,http://127.0.0.1:8080,http://localhost:8081,http://127.0.0.1:8081",
+        "https://petcaretracker.app,https://www.petcaretracker.app,https://petcare-tracker-1.onrender.com,http://localhost:8080,http://127.0.0.1:8080,http://localhost:8081,http://127.0.0.1:8081",
     ).split(",") if origin
 ]
 
