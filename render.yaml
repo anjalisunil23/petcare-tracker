@@ -7,7 +7,7 @@ services:
     branch: main
     buildCommand: |
       pip install -r backend/requirements.txt &&
-      npm ci --prefix carecompanion-dash &&
+      npm install --prefix carecompanion-dash &&
       npm run build --prefix carecompanion-dash &&
       mkdir -p backend/frontend_dist &&
       cp -r carecompanion-dash/dist/* backend/frontend_dist/ &&
