@@ -145,7 +145,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = '/static/'
-STATICFILES_DIRS = [BASE_DIR / 'frontend_dist']
+frontend_dist_dir = BASE_DIR / 'frontend_dist'
+STATICFILES_DIRS = [frontend_dist_dir] if frontend_dist_dir.exists() else []
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
