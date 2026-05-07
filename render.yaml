@@ -1,3 +1,43 @@
+# Render deployment manifest for Petcare Tracker
+# Adapt names, branches, and plans to your Render account before deploying.
+
+services:
+  - type: "postgres"
+    name: "petcare-db"
+    plan: "starter"
+
+  - type: "web_service"
+    name: "petcare-backend"
+    env: "python"
+    branch: "main"
+    buildCommand: "pip install -r backend/requirements.txt && python backend/manage.py migrate --noinput && python backend/manage.py collectstatic --noinput"
+    startCommand: "gunicorn config.wsgi:application --workers 3 --bind 0.0.0.0:$PORT"
+    envVars:
+      - key: "DATABASE_URL"
+        fromDatabase: "petcare-db"
+      - key: "DJANGO_SECRET_KEY"
+        generator: "secret"
+      - key: "DJANGO_DEBUG"
+        value: "false"
+      - key: "DJANGO_ALLOWED_HOSTS"
+        value: "petcare-backend.onrender.com"
+
+  - type: "static_site"
+    name: "petcare-frontend"
+    env: "node"
+    branch: "main"
+    buildCommand: "npm ci && npm run build"
+    publishPath: "dist"
+
+# Optional one-off job to seed demo data after DB is provisioned.
+# Run this manually from Render dashboard or adjust schedule as needed.
+jobs:
+  - type: "job"
+    name: "seed-demo-data"
+    env: "python"
+    buildCommand: "pip install -r backend/requirements.txt"
+    startCommand: "python backend/manage.py seed_demo_data"
+    schedule: "manual"
 services:
   - type: web
     name: petcare-backend

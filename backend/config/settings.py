@@ -13,10 +13,20 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 from dotenv import load_dotenv
 import os
+import sys
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
+
+try:
+    import pymysql
+
+    pymysql.__version__ = "2.2.8"
+    pymysql.version_info = (2, 2, 8, "final", 0)
+    sys.modules["MySQLdb"] = pymysql
+except ImportError:
+    pass
 
 
 # Quick-start development settings - unsuitable for production
@@ -56,6 +66,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -99,6 +110,9 @@ if database_engine == "mysql":
             "PASSWORD": os.getenv("MYSQL_PASSWORD", "petcare_password"),
             "HOST": os.getenv("MYSQL_HOST", "localhost"),
             "PORT": os.getenv("MYSQL_PORT", "3306"),
+            "OPTIONS": {
+                "charset": "utf8mb4",
+            },
         }
     }
 else:
@@ -107,6 +121,14 @@ else:
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "db.sqlite3",
         }
+    }
+
+# Allow Render (or other hosts) to provide a DATABASE_URL (Postgres) and prefer it when present.
+import dj_database_url
+DATABASE_URL = os.getenv("DATABASE_URL")
+if DATABASE_URL:
+    DATABASES = {
+        "default": dj_database_url.parse(DATABASE_URL, conn_max_age=600),
     }
 
 
@@ -148,6 +170,10 @@ STATIC_URL = '/static/'
 frontend_dist_dir = BASE_DIR / 'frontend_dist'
 STATICFILES_DIRS = [frontend_dist_dir] if frontend_dist_dir.exists() else []
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Use WhiteNoise static files storage in production for simple static serving.
+if not DEBUG:
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
